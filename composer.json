@@ -1,0 +1,17 @@
+{
+    "name": "ningzhou/learn-cve",
+    "autoload": {
+        "psr-4": {
+            "Ningzhou\\LearnCve\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Ning Zhou",
+            "email": "ning.zhou@totaralearning.com"
+        }
+    ],
+    "require": {
+        "dompdf/dompdf": "^1.2"
+    }
+}
