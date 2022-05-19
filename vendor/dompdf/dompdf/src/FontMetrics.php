@@ -133,7 +133,8 @@ class FontMetrics
 
         $file = $rootDir . "/lib/fonts/dompdf_font_family_cache.dist.php";
         $distFontsClosure = require $file;
-        $distFonts = is_array($distFontsClosure) ? $distFontsClosure : $distFontsClosure($rootDir);
+        $distFonts = $distFontsClosure($rootDir);
+
         if (!is_readable($this->getCacheFile())) {
             $this->fontLookup = $distFonts;
             return;
@@ -206,16 +207,17 @@ class FontMetrics
         }
 
         $cacheEntry = $localFile;
+        $localFile .= ".".strtolower(pathinfo(parse_url($remoteFile, PHP_URL_PATH), PATHINFO_EXTENSION));
 
         $entry[$styleString] = $cacheEntry;
 
         // Download the remote file
-        [$protocol] = Helpers::explode_url($remoteFile);
-        if (!$this->options->isRemoteEnabled() && ($protocol !== "" && $protocol !== "file://")) {
+        [$protocol, $baseHost, $basePath] = Helpers::explode_url($remoteFile);
+        if (!$this->options->isRemoteEnabled() && ($protocol != "" && $protocol !== "file://")) {
             Helpers::record_warnings(E_USER_WARNING, "Remote font resource $remoteFile referenced, but remote file download is disabled.", __FILE__, __LINE__);
             return false;
         }
-        if ($protocol === "" || $protocol === "file://") {
+        if ($protocol == "" || $protocol === "file://") {
             $realfile = realpath($remoteFile);
 
             $rootDir = realpath($this->options->getRootDir());
@@ -243,7 +245,7 @@ class FontMetrics
             $remoteFile = $realfile;
         }
         list($remoteFileContent, $http_response_header) = @Helpers::getFileContent($remoteFile, $context);
-        if ($remoteFileContent === null) {
+        if (empty($remoteFileContent)) {
             return false;
         }
 
@@ -255,13 +257,6 @@ class FontMetrics
         if (!$font) {
             unlink($localTempFile);
             return false;
-        }
-
-        switch ($font->getFontType()) {
-            case "TrueType":
-            default:
-                $localFile .= ".ttf";
-                break;
         }
 
         $font->parse();
@@ -357,7 +352,7 @@ class FontMetrics
     }
 
     /**
-     * Calculates font height, in points
+     * Calculates font height
      *
      * @param string $font
      * @param float $size
@@ -367,19 +362,6 @@ class FontMetrics
     public function getFontHeight($font, $size)
     {
         return $this->canvas->get_font_height($font, $size);
-    }
-
-    /**
-     * Calculates font baseline, in points
-     *
-     * @param string $font
-     * @param float $size
-     *
-     * @return float
-     */
-    public function getFontBaseline($font, $size)
-    {
-        return $this->canvas->get_font_baseline($font, $size);
     }
 
     /**
@@ -433,39 +415,38 @@ class FontMetrics
             return null;
         }
 
-        $fallback_families = [strtolower($this->options->getDefaultFont()), "serif"];
-        foreach ($fallback_families as $family) {
-            if (isset($this->fontLookup[$family][$subtype])) {
-                return $cache[$familyRaw][$subtypeRaw] = $this->fontLookup[$family][$subtype];
+        $family = "serif";
+
+        if (isset($this->fontLookup[$family][$subtype])) {
+            return $cache[$familyRaw][$subtypeRaw] = $this->fontLookup[$family][$subtype];
+        }
+
+        if (!isset($this->fontLookup[$family])) {
+            return null;
+        }
+
+        $family = $this->fontLookup[$family];
+
+        foreach ($family as $sub => $font) {
+            if (strpos($subtype, $sub) !== false) {
+                return $cache[$familyRaw][$subtypeRaw] = $font;
             }
-    
-            if (!isset($this->fontLookup[$family])) {
-                continue;
-            }
-    
-            $family = $this->fontLookup[$family];
-    
+        }
+
+        if ($subtype !== "normal") {
             foreach ($family as $sub => $font) {
-                if (strpos($subtype, $sub) !== false) {
+                if ($sub !== "normal") {
                     return $cache[$familyRaw][$subtypeRaw] = $font;
                 }
             }
-    
-            if ($subtype !== "normal") {
-                foreach ($family as $sub => $font) {
-                    if ($sub !== "normal") {
-                        return $cache[$familyRaw][$subtypeRaw] = $font;
-                    }
-                }
-            }
-    
-            $subtype = "normal";
-    
-            if (isset($family[$subtype])) {
-                return $cache[$familyRaw][$subtypeRaw] = $family[$subtype];
-            }
         }
-        
+
+        $subtype = "normal";
+
+        if (isset($family[$subtype])) {
+            return $cache[$familyRaw][$subtypeRaw] = $family[$subtype];
+        }
+
         return null;
     }
 
